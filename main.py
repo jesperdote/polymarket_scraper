@@ -40,7 +40,7 @@ for slug in slugs:
             elif outcome.lower() == "no":
                 no_price = price  # Store "No" price
                 print(f"{outcome} = {price}")
-                if float(price) < 0.80:
+                if float(price) > 0.80:
                     alert_outcomes.append(f"*No* is at *{price}*")
 
         # Display the "Yes" price
