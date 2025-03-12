@@ -1,17 +1,22 @@
 import json
 import os
 from utils.api import fetch_market_data
-from utils.slack import send_slack_notification
+from utils.notifications import send_slack_notification, send_discord_notification
 
-# Load Slack webhook URL from file
+# Load webhook URLs from file
 WEBHOOK_FILE = "webhook.txt"
 SLACK_WEBHOOK_URL = None
+DISCORD_WEBHOOK_URL = None
 
 if os.path.exists(WEBHOOK_FILE):
     with open(WEBHOOK_FILE, "r") as f:
-        SLACK_WEBHOOK_URL = f.read().strip()
+        lines = f.readlines()
+        if len(lines) > 0:
+            SLACK_WEBHOOK_URL = lines[0].strip()
+        if len(lines) > 1:
+            DISCORD_WEBHOOK_URL = lines[1].strip()
 else:
-    print("⚠️ Warning: No Slack webhook file found. Notifications are disabled.")
+    print("⚠️ Warning: No webhook file found. Notifications are disabled.")
 
 # Read slugs from a text file
 with open("markets.txt", "r") as file:
@@ -25,7 +30,7 @@ for slug in slugs:
         prices = json.loads(data[0].get("outcomePrices", "[]"))
         print(f"\nEvent: {slug}")
 
-        alert_outcomes = []  # Store "No" outcomes below 0.50
+        alert_outcomes = []  # Store "No" outcomes above 0.80
         yes_price = None  # Track "Yes" price
         no_price = None  # Track "No" price
 
@@ -35,21 +40,25 @@ for slug in slugs:
             elif outcome.lower() == "no":
                 no_price = price  # Store "No" price
                 print(f"{outcome} = {price}")
-                if float(price) > 0.80:
-                    alert_outcomes.append(f"*No* is at {price}")
+                if float(price) < 0.80:
+                    alert_outcomes.append(f"*No* is at *{price}*")
 
         # Display the "Yes" price
         if yes_price:
             print(f"Yes = {yes_price}")
 
-        # Send Slack alert only if "No" outcome is below 0.50
-        if alert_outcomes and SLACK_WEBHOOK_URL:
+        # Send alert if "No" outcome is above 0.80
+        if alert_outcomes:
             market_url = f"https://polymarket.com/market/{slug}"
-            link = f"<{market_url}|{slug}>"
-            message = f"📈 *Trading Signal:* {link} \nMarket activity is rising!\n" + "\n".join(alert_outcomes) + f"\n*Yes* is at {yes_price}"
-            send_slack_notification(SLACK_WEBHOOK_URL, message)
+            link = f"<{market_url}|{slug}>"  # Slack hyperlink format
+            message = f"📈 *Market Alert:* {link}\n'No' is trending above 0.80!\n" + "\n".join(alert_outcomes) + f"\n*Yes* is at {yes_price}"
+
+            if SLACK_WEBHOOK_URL:
+                send_slack_notification(SLACK_WEBHOOK_URL, message)
+
+            if DISCORD_WEBHOOK_URL:
+                discord_message = f"📈 **Market Alert:** [{slug}]({market_url})\n'No' is trending above 0.80!\n" + "\n".join(alert_outcomes) + f"\n**Yes** is at {yes_price}"
+                send_discord_notification(DISCORD_WEBHOOK_URL, discord_message)
 
     else:
         print(f"\nEvent: {slug} - No data found.")
-
-
